@@ -1,0 +1,4 @@
+﻿cl : Command line warning D9002: ignoring unknown option '/wc4574'
+  main.c
+c:\users\simon\downloads\freertosv10.0.1\freertosv10.0.1\freertos\demo\win32-msvc\main.c(153): warning C4702: unreachable code
+  WIN32.vcxproj -> C:\Users\Simon\Downloads\FreeRTOSv10.0.1\FreeRTOSv10.0.1\FreeRTOS\Demo\WIN32-MSVC\.\Debug\RTOSDemo.exe
