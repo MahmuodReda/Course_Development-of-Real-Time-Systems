@@ -52,7 +52,7 @@
 /* Standard includes. */
 #include <stdio.h>
 #include <stdlib.h>
-#include <conio.h>
+//#include <conio.h>
 
 /* FreeRTOS kernel includes. */
 #include "FreeRTOS.h"
@@ -68,7 +68,7 @@ The blinky demo is implemented and described in main_blinky.c.
 If mainCREATE_SIMPLE_BLINKY_DEMO_ONLY is not 1 then the comprehensive test and
 demo application will be built.  The comprehensive test and demo application is
 implemented and described in main_full.c. */
-#define mainCREATE_SIMPLE_BLINKY_DEMO_ONLY	0
+#define mainCREATE_SIMPLE_BLINKY_DEMO_ONLY	1
 
 /* This demo uses heap_5.c, and these constants define the sizes of the regions
 that make up the total heap.  heap_5 is only used for test and example purposes
@@ -85,15 +85,15 @@ choice.  See http://www.freertos.org/a00111.html for an explanation. */
  * main_blinky() is used when mainCREATE_SIMPLE_BLINKY_DEMO_ONLY is set to 1.
  * main_full() is used when mainCREATE_SIMPLE_BLINKY_DEMO_ONLY is set to 0.
  */
-extern void main_blinky( void );
-extern void main_full( void );
+//extern void main_blinky( void );
+//extern void main_full( void );
 
 /*
  * Only the comprehensive demo uses application hook (callback) functions.  See
  * http://www.freertos.org/a00016.html for more information.
  */
-void vFullDemoTickHookFunction( void );
-void vFullDemoIdleFunction( void );
+//void vFullDemoTickHookFunction( void );
+//void vFullDemoIdleFunction( void );
 
 /*
  * This demo uses heap_5.c, so start by defining some heap regions.  It is not
@@ -111,6 +111,8 @@ void vApplicationMallocFailedHook( void );
 void vApplicationIdleHook( void );
 void vApplicationStackOverflowHook( TaskHandle_t pxTask, char *pcTaskName );
 void vApplicationTickHook( void );
+void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize );
+void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer, StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize );
 
 /*
  * Writes trace data to a disk file when the trace recording is stopped.
@@ -118,10 +120,41 @@ void vApplicationTickHook( void );
  */
 static void prvSaveTraceFile( void );
 
+/*-----------------------------------------------------------*/
+
+/* When configSUPPORT_STATIC_ALLOCATION is set to 1 the application writer can
+use a callback function to optionally provide the memory required by the idle
+and timer tasks.  This is the stack that will be used by the timer task.  It is
+declared here, as a global, so it can be checked by a test that is implemented
+in a different file. */
+StackType_t uxTimerTaskStack[ configTIMER_TASK_STACK_DEPTH ];
+
 /* Notes if the trace is running or not. */
 static BaseType_t xTraceRunning = pdTRUE;
 
 /*-----------------------------------------------------------*/
+
+void HelloTask() {
+	while (1) {
+		printf("Hello World!\n");
+		vTaskDelay(1000);
+	}
+}
+
+void Task1() {
+	while (1) {
+		printf("This is task 1\n");
+		vTaskDelay(100);
+		fflush(stdout);
+	}
+}
+
+void Task2() {
+	while (1) {
+		printf("This is task 2\n");
+		vTaskDelay(500);
+	}
+}
 
 int main( void )
 {
@@ -134,24 +167,17 @@ int main( void )
 	See http://www.FreeRTOS.org/trace for more information. */
 	vTraceEnable( TRC_START );
 
-	/* The mainCREATE_SIMPLE_BLINKY_DEMO_ONLY setting is described at the top
-	of this file. */
-	#if ( mainCREATE_SIMPLE_BLINKY_DEMO_ONLY == 1 )
-	{
-		main_blinky();
-	}
-	#else
-	{
-		/* Start the trace recording - the recording is written to a file if
-		configASSERT() is called. */
-		printf( "\r\nTrace started.\r\nThe trace will be dumped to disk if a call to configASSERT() fails.\r\n" );
-		printf( "Uncomment the call to kbhit() in this file to also dump trace with a key press.\r\n" );
-		uiTraceStart();
+	//xTaskHandle HT;
+	//xTaskCreate(HelloTask, "HelloTask", configMINIMAL_STACK_SIZE, NULL, 1, &HT);
 
-		main_full();
-	}
-	#endif
+	xTaskHandle T1;
+	xTaskHandle T2;
 
+	xTaskCreate(Task1, "Task1", 1000, NULL, 3, &T1);
+	xTaskCreate(Task2, "Task2", 100, NULL, 1, &T2);
+
+	vTaskStartScheduler();
+	for (;;);
 	return 0;
 }
 /*-----------------------------------------------------------*/
@@ -232,7 +258,6 @@ void vApplicationTickHook( void )
 	added here, but the tick hook is called from an interrupt context, so
 	code must not attempt to block, and only the interrupt safe FreeRTOS API
 	functions can be used (those that end in FromISR()). */
-
 	#if ( mainCREATE_SIMPLE_BLINKY_DEMO_ONLY != 1 )
 	{
 		vFullDemoTickHookFunction();
@@ -293,7 +318,7 @@ static void prvSaveTraceFile( void )
 {
 FILE* pxOutputFile;
 
-	pxOutputFile = fopen( "Trace.dump", "wb");
+	fopen_s( &pxOutputFile, "Trace.dump", "wb");
 
 	if( pxOutputFile != NULL )
 	{
@@ -341,3 +366,52 @@ const HeapRegion_t xHeapRegions[] =
 	vPortDefineHeapRegions( xHeapRegions );
 }
 /*-----------------------------------------------------------*/
+
+/* configUSE_STATIC_ALLOCATION is set to 1, so the application must provide an
+implementation of vApplicationGetIdleTaskMemory() to provide the memory that is
+used by the Idle task. */
+void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize )
+{
+/* If the buffers to be provided to the Idle task are declared inside this
+function then they must be declared static - otherwise they will be allocated on
+the stack and so not exists after this function exits. */
+static StaticTask_t xIdleTaskTCB;
+static StackType_t uxIdleTaskStack[ configMINIMAL_STACK_SIZE ];
+
+	/* Pass out a pointer to the StaticTask_t structure in which the Idle task's
+	state will be stored. */
+	*ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
+
+	/* Pass out the array that will be used as the Idle task's stack. */
+	*ppxIdleTaskStackBuffer = uxIdleTaskStack;
+
+	/* Pass out the size of the array pointed to by *ppxIdleTaskStackBuffer.
+	Note that, as the array is necessarily of type StackType_t,
+	configMINIMAL_STACK_SIZE is specified in words, not bytes. */
+	*pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
+}
+/*-----------------------------------------------------------*/
+
+/* configUSE_STATIC_ALLOCATION and configUSE_TIMERS are both set to 1, so the
+application must provide an implementation of vApplicationGetTimerTaskMemory()
+to provide the memory that is used by the Timer service task. */
+void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer, StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize )
+{
+/* If the buffers to be provided to the Timer task are declared inside this
+function then they must be declared static - otherwise they will be allocated on
+the stack and so not exists after this function exits. */
+static StaticTask_t xTimerTaskTCB;
+
+	/* Pass out a pointer to the StaticTask_t structure in which the Timer
+	task's state will be stored. */
+	*ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
+
+	/* Pass out the array that will be used as the Timer task's stack. */
+	*ppxTimerTaskStackBuffer = uxTimerTaskStack;
+
+	/* Pass out the size of the array pointed to by *ppxTimerTaskStackBuffer.
+	Note that, as the array is necessarily of type StackType_t,
+	configMINIMAL_STACK_SIZE is specified in words, not bytes. */
+	*pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
+}
+
